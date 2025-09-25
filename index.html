@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Round Robin Animation</title>
+  <style>
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    header {
+      padding: 1rem;
+      text-align: center;
+      background: #161b22;
+      width: 100%;
+      border-bottom: 1px solid #30363d;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: #58a6ff;
+    }
+    .controls {
+      margin: 1rem;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    button, input[type=range] {
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #e6edf3;
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover, input[type=range]:hover {
+      background: #30363d;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1.5fr;
+      gap: 1.5rem;
+      width: 90%;
+      margin-bottom: 2rem;
+    }
+    .panel {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .queue, .cpu, .finished {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .process {
+      background: #238636;
+      color: #fff;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      font-weight: bold;
+    }
+    .process.active {
+      background: #d29922;
+    }
+    .gantt {
+      display: flex;
+      gap: 2px;
+      margin-top: 1rem;
+    }
+    .gantt-slice {
+      background: #58a6ff;
+      padding: 0.3rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      text-align: center;
+      min-width: 40px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    table, th, td {
+      border: 1px solid #30363d;
+    }
+    th, td {
+      padding: 0.4rem;
+      text-align: center;
+    }
+    th {
+      background: #21262d;
+      color: #58a6ff;
+    }
+    .highlight {
+      background: #2d333b;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Round Robin Scheduling Animation (q = 2)</h1>
+  </header>
+  <div class="controls">
+    <button onclick="prevStep()">⏮ Back</button>
+    <button onclick="nextStep()">⏭ Next</button>
+    <button onclick="play()">▶ Play</button>
+    <button onclick="pause()">⏸ Pause</button>
+    <button onclick="reset()">🔄 Reset</button>
+    <label>Speed <input type="range" id="speed" min="200" max="2000" step="200" value="1000"></label>
+  </div>
+  <div class="layout">
+    <div class="panel">
+      <h3>Simulation</h3>
+      <h4>Ready Queue</h4>
+      <div id="queue" class="queue"></div>
+      <h4>CPU</h4>
+      <div id="cpu" class="cpu"></div>
+      <h4>Finished</h4>
+      <div id="finished" class="finished"></div>
+      <h4>Gantt Chart</h4>
+      <div id="gantt" class="gantt"></div>
+    </div>
+    <div class="panel">
+      <h3>Step Table</h3>
+      <table id="steps">
+        <thead>
+          <tr><th>Slice</th><th>Process</th><th>Exec</th><th>Start→End</th><th>Remaining</th><th>Queue</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <h3>Final Summary</h3>
+      <table id="summary">
+        <thead>
+          <tr><th>Process</th><th>Burst</th><th>Completion</th><th>Turnaround</th><th>Waiting</th></tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr><th colspan="2">Averages</th><th></th><th id="avgTAT"></th><th id="avgWT"></th></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  <script>
+    const steps = [
+      [1,'P1','2','0→2','8','P2(5), P3(8), P4(6), P1(8)'],
+      [2,'P2','2','2→4','3','P3(8), P4(6), P1(8), P2(3)'],
+      [3,'P3','2','4→6','6','P4(6), P1(8), P2(3), P3(6)'],
+      [4,'P4','2','6→8','4','P1(8), P2(3), P3(6), P4(4)'],
+      [5,'P1','2','8→10','6','P2(3), P3(6), P4(4), P1(6)'],
+      [6,'P2','2','10→12','1','P3(6), P4(4), P1(6), P2(1)'],
+      [7,'P3','2','12→14','4','P4(4), P1(6), P2(1), P3(4)'],
+      [8,'P4','2','14→16','2','P1(6), P2(1), P3(4), P4(2)'],
+      [9,'P1','2','16→18','4','P2(1), P3(4), P4(2), P1(4)'],
+      [10,'P2','1','18→19','0 (done)','P3(4), P4(2), P1(4)'],
+      [11,'P3','2','19→21','2','P4(2), P1(4), P3(2)'],
+      [12,'P4','2','21→23','0 (done)','P1(4), P3(2)'],
+      [13,'P1','2','23→25','2','P3(2), P1(2)'],
+      [14,'P3','2','25→27','0 (done)','P1(2)'],
+      [15,'P1','2','27→29','0 (done)','[]']
+    ];
+    const summary = [
+      ['P1',10,29,29,19],
+      ['P2',5,19,19,14],
+      ['P3',8,27,27,19],
+      ['P4',6,23,23,17]
+    ];
+    const tbody = document.querySelector('#steps tbody');
+    steps.forEach((s,i)=>{
+      const tr = document.createElement('tr');
+      s.forEach((val,j)=>{
+        const td=document.createElement('td');
+        td.textContent=val;tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    let index=0, timer=null;
+    function update(){
+      document.querySelectorAll('#steps tbody tr').forEach((tr,i)=>{
+        tr.classList.toggle('highlight', i===index);
+      });
+      document.getElementById('queue').innerHTML = steps[index][5].split(',').map(x=><div class='process'>${x.trim()}</div>).join('');
+      document.getElementById('cpu').innerHTML = <div class='process active'>${steps[index][1]} (${steps[index][2]})</div>;
+      if(steps[index][4].includes('done')){
+        document.getElementById('finished').innerHTML += <div class='process'>${steps[index][1]}</div>;
+      }
+      document.getElementById('gantt').innerHTML += <div class='gantt-slice'>${steps[index][1]}<br>${steps[index][3]}</div>;
+      if(index===steps.length-1){fillSummary();}
+    }
+    function fillSummary(){
+      const tbody=document.querySelector('#summary tbody');
+      tbody.innerHTML='';
+      let sumTAT=0,sumWT=0;
+      summary.forEach(row=>{
+        const tr=document.createElement('tr');
+        row.forEach(val=>{
+          const td=document.createElement('td');
+          td.textContent=val;tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+        sumTAT+=row[3];sumWT+=row[4];
+      });
+      document.getElementById('avgTAT').textContent=(sumTAT/summary.length).toFixed(2);
+      document.getElementById('avgWT').textContent=(sumWT/summary.length).toFixed(2);
+    }
+    function nextStep(){if(index<steps.length){update();index++;}}
+    function prevStep(){if(index>0){index--;update();}}
+    function play(){if(!timer){timer=setInterval(()=>{if(index<steps.length){nextStep();}else{pause();}},document.getElementById('speed').value);}}
+    function pause(){clearInterval(timer);timer=null;}
+    function reset(){pause();index=0;document.getElementById('queue').innerHTML='';document.getElementById('cpu').innerHTML='';document.getElementById('finished').innerHTML='';document.getElementById('gantt').innerHTML='';document.querySelectorAll('#steps tbody tr').forEach(tr=>tr.classList.remove('highlight'));document.querySelector('#summary tbody').innerHTML='';document.getElementById('avgTAT').textContent='';document.getElementById('avgWT').textContent='';}
+  </script>
+</body>
+</html>
