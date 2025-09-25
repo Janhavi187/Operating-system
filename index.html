@@ -78,6 +78,7 @@
       display: flex;
       gap: 2px;
       margin-top: 1rem;
+      flex-wrap: wrap;
     }
     .gantt-slice {
       background: #58a6ff;
@@ -171,55 +172,142 @@
       [14,'P3','2','25→27','0 (done)','P1(2)'],
       [15,'P1','2','27→29','0 (done)','[]']
     ];
+
     const summary = [
       ['P1',10,29,29,19],
       ['P2',5,19,19,14],
       ['P3',8,27,27,19],
       ['P4',6,23,23,17]
     ];
+
     const tbody = document.querySelector('#steps tbody');
-    steps.forEach((s,i)=>{
+    steps.forEach(s => {
       const tr = document.createElement('tr');
-      s.forEach((val,j)=>{
-        const td=document.createElement('td');
-        td.textContent=val;tr.appendChild(td);
+      s.forEach(val => {
+        const td = document.createElement('td');
+        td.textContent = val;
+        tr.appendChild(td);
       });
       tbody.appendChild(tr);
     });
-    let index=0, timer=null;
-    function update(){
-      document.querySelectorAll('#steps tbody tr').forEach((tr,i)=>{
-        tr.classList.toggle('highlight', i===index);
-      });
-      document.getElementById('queue').innerHTML = steps[index][5].split(',').map(x=><div class='process'>${x.trim()}</div>).join('');
-      document.getElementById('cpu').innerHTML = <div class='process active'>${steps[index][1]} (${steps[index][2]})</div>;
-      if(steps[index][4].includes('done')){
-        document.getElementById('finished').innerHTML += <div class='process'>${steps[index][1]}</div>;
+
+    let index = 0, timer = null;
+
+    function renderUpTo(stepIndex) {
+      // Reset
+      document.getElementById('queue').innerHTML = '';
+      document.getElementById('cpu').innerHTML = '';
+      document.getElementById('finished').innerHTML = '';
+      document.getElementById('gantt').innerHTML = '';
+      document.querySelectorAll('#steps tbody tr')
+        .forEach(tr => tr.classList.remove('highlight'));
+
+      // Track finished processes
+      let finishedSet = new Set();
+
+      // Render all steps up to stepIndex
+      for (let i = 0; i <= stepIndex; i++) {
+        const s = steps[i];
+
+        // Queue
+        document.getElementById('queue').innerHTML = s[5]
+          .split(',')
+          .filter(x => x.trim() !== '[]' && x.trim() !== '')
+          .map(x => `<div class="process">${x.trim()}</div>`)
+          .join('');
+
+        // CPU
+        document.getElementById('cpu').innerHTML =
+          `<div class="process active">${s[1]} (${s[2]})</div>`;
+
+        // Finished
+        if (s[4].includes('done')) {
+          finishedSet.add(s[1]);
+        }
+        document.getElementById('finished').innerHTML =
+          [...finishedSet].map(p => `<div class="process">${p}</div>`).join('');
+
+        // Gantt chart
+        document.getElementById('gantt').innerHTML +=
+          `<div class="gantt-slice">${s[1]}<br>${s[3]}</div>`;
       }
-      document.getElementById('gantt').innerHTML += <div class='gantt-slice'>${steps[index][1]}<br>${steps[index][3]}</div>;
-      if(index===steps.length-1){fillSummary();}
+
+      // Highlight current step row
+      if (stepIndex >= 0 && stepIndex < steps.length) {
+        document.querySelectorAll('#steps tbody tr')[stepIndex]
+          .classList.add('highlight');
+      }
+
+      // If finished last step → fill summary
+      if (stepIndex === steps.length - 1) {
+        fillSummary();
+      } else {
+        document.querySelector('#summary tbody').innerHTML = '';
+        document.getElementById('avgTAT').textContent = '';
+        document.getElementById('avgWT').textContent = '';
+      }
     }
-    function fillSummary(){
-      const tbody=document.querySelector('#summary tbody');
-      tbody.innerHTML='';
-      let sumTAT=0,sumWT=0;
-      summary.forEach(row=>{
-        const tr=document.createElement('tr');
-        row.forEach(val=>{
-          const td=document.createElement('td');
-          td.textContent=val;tr.appendChild(td);
+
+    function fillSummary() {
+      const tbody = document.querySelector('#summary tbody');
+      tbody.innerHTML = '';
+      let sumTAT = 0, sumWT = 0;
+      summary.forEach(row => {
+        const tr = document.createElement('tr');
+        row.forEach(val => {
+          const td = document.createElement('td');
+          td.textContent = val;
+          tr.appendChild(td);
         });
         tbody.appendChild(tr);
-        sumTAT+=row[3];sumWT+=row[4];
+        sumTAT += row[3];
+        sumWT += row[4];
       });
-      document.getElementById('avgTAT').textContent=(sumTAT/summary.length).toFixed(2);
-      document.getElementById('avgWT').textContent=(sumWT/summary.length).toFixed(2);
+      document.getElementById('avgTAT').textContent =
+        (sumTAT / summary.length).toFixed(2);
+      document.getElementById('avgWT').textContent =
+        (sumWT / summary.length).toFixed(2);
     }
-    function nextStep(){if(index<steps.length){update();index++;}}
-    function prevStep(){if(index>0){index--;update();}}
-    function play(){if(!timer){timer=setInterval(()=>{if(index<steps.length){nextStep();}else{pause();}},document.getElementById('speed').value);}}
-    function pause(){clearInterval(timer);timer=null;}
-    function reset(){pause();index=0;document.getElementById('queue').innerHTML='';document.getElementById('cpu').innerHTML='';document.getElementById('finished').innerHTML='';document.getElementById('gantt').innerHTML='';document.querySelectorAll('#steps tbody tr').forEach(tr=>tr.classList.remove('highlight'));document.querySelector('#summary tbody').innerHTML='';document.getElementById('avgTAT').textContent='';document.getElementById('avgWT').textContent='';}
+
+    function nextStep() {
+      if (index < steps.length) {
+        renderUpTo(index);
+        index++;
+      }
+    }
+
+    function prevStep() {
+      if (index > 0) {
+        index--;
+        renderUpTo(index);
+      }
+    }
+
+    function play() {
+      if (!timer) {
+        timer = setInterval(() => {
+          if (index < steps.length) {
+            nextStep();
+          } else {
+            pause();
+          }
+        }, document.getElementById('speed').value);
+      }
+    }
+
+    function pause() {
+      clearInterval(timer);
+      timer = null;
+    }
+
+    function reset() {
+      pause();
+      index = 0;
+      renderUpTo(-1); // clears everything
+    }
+
+    // Initial state
+    reset();
   </script>
 </body>
 </html>
